@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>手势音乐可视化 - 探索+学习 Demo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #000; overflow: hidden; font-family: "PingFang SC", "Microsoft YaHei", sans-serif; }
+        canvas { display: block; }
+
+        /* 启动遮罩 */
+        #start-screen {
+            position: fixed; inset: 0; z-index: 50;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 26px; color: #fff;
+            background: radial-gradient(circle at center, #141414 0%, #000 70%);
+            transition: opacity .5s;
+        }
+        #start-screen h1 { font-size: 30px; font-weight: 600; letter-spacing: 2px; }
+        #start-screen p { font-size: 15px; color: rgba(255,255,255,.6); line-height: 1.9; text-align: center; }
+        #start-btn {
+            padding: 15px 52px; font-size: 18px; border-radius: 999px;
+            border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.08);
+            color: #fff; cursor: pointer; transition: .25s; letter-spacing: 1px;
+        }
+        #start-btn:hover { background: rgba(255,255,255,.2); transform: translateY(-2px); }
+
+        /* 模式切换 */
+        #mode-tabs {
+            position: fixed; top: 20px; left: 20px; z-index: 20;
+            display: flex; gap: 10px; opacity: 0; transition: opacity .5s;
+        }
+        #mode-tabs.active { opacity: 1; }
+        .tab {
+            padding: 9px 18px; border-radius: 999px; font-size: 13px; cursor: pointer;
+            border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.06);
+            color: rgba(255,255,255,.7); transition: .2s;
+        }
+        .tab.active { background: rgba(90,130,220,.92); color: #fff; border-color: transparent; }
+
+        /* 摄像头小窗 */
+        #video-container {
+            position: fixed; top: 20px; right: 20px; width: 240px; height: 180px;
+            border-radius: 12px; overflow: hidden; border: 1px solid rgba(255,255,255,.15);
+            z-index: 10; opacity: 0; transition: opacity .6s; background: #111;
+        }
+        #video-container.active { opacity: 1; }
+        #video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+        #status {
+            position: absolute; bottom: 8px; left: 8px; font-size: 12px; color: #fff;
+            background: rgba(0,0,0,.55); padding: 4px 12px; border-radius: 999px;
+            white-space: nowrap;
+        }
+
+        /* 音符提示：位于粒子球下方（探索模式） */
+        #note-display {
+            position: fixed; top: 82%; left: 50%; z-index: 5;
+            font-size: 170px; font-weight: 900; pointer-events: none;
+            font-family: Georgia, "Times New Roman", serif;
+            color: #ffe9b0; opacity: 0;
+            transform: translate(-50%, -50%);
+            text-shadow: 0 0 40px rgba(255,200,120,.85), 0 0 120px rgba(255,170,70,.5);
+            transition: opacity .3s, color .35s, text-shadow .35s;
+        }
+
+        /* 无效手势提示 */
+        #gesture-warning {
+            position: fixed; top: 64%; left: 50%; z-index: 6;
+            transform: translate(-50%, -50%);
+            font-size: 24px; letter-spacing: 3px; pointer-events: none;
+            white-space: nowrap;
+            color: rgba(255, 138, 128, .92);
+            text-shadow: 0 0 18px rgba(255, 90, 80, .55);
+            opacity: 0; transition: opacity .35s;
+        }
+        #gesture-warning.show { opacity: 1; }
+
+        /* 底部操作提示（探索模式） */
+        #hint {
+            position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);
+            z-index: 10; color: rgba(255,255,255,.45); font-size: 14px;
+            opacity: 0; transition: opacity .6s; letter-spacing: 1px;
+        }
+        #hint.active { opacity: 1; }
+
+        /* 手势示范小动画（左下角，两帧循环） */
+        #gesture-demo-label {
+            position: fixed; left: 20px; bottom: 178px; width: 150px; z-index: 12;
+            text-align: center; color: rgba(255,255,255,.82); font-size: 12px;
+            letter-spacing: .5px; opacity: 0; transition: opacity .6s;
+        }
+        #gesture-demo {
+            position: fixed; left: 20px; bottom: 20px; width: 150px; height: 150px;
+            border-radius: 16px; overflow: hidden; background: #fff; z-index: 12;
+            border: 1px solid rgba(255,255,255,.2);
+            box-shadow: 0 6px 26px rgba(0,0,0,.5);
+            opacity: 0; transition: opacity .6s;
+        }
+        #gesture-demo.active, #gesture-demo-label.active { opacity: 1; }
+        #gesture-demo img {
+            position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+        }
+        .gd-do { animation: gdDo 2.8s infinite; }
+        .gd-re { animation: gdRe 2.8s infinite; }
+        @keyframes gdDo {
+            0%,45% { opacity: 1; }
+            50%,95% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+        @keyframes gdRe {
+            0%,45% { opacity: 0; }
+            50%,95% { opacity: 1; }
+            100% { opacity: 0; }
+        }
+
+        /* ===== 学习模式 ===== */
+        #learn-panel { display: none; }
+        body.learn-mode #learn-panel { display: block; }
+        body.learn-mode #note-display,
+        body.learn-mode #hint,
+        body.learn-mode #gesture-warning { opacity: 0 !important; }
+
+        #score-cards {
+            position: fixed; top: 35%; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 16px; z-index: 15;
+        }
+        .score-card {
+            width: 62px; height: 78px; border-radius: 14px;
+            border: 1.5px solid rgba(255,255,255,.25); background: rgba(255,255,255,.06);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 5px; transition: .25s;
+        }
+        .score-card .num {
+            font-size: 30px; font-weight: 800; line-height: 1;
+            color: rgba(255,255,255,.85); font-family: Georgia, serif;
+        }
+        .score-card .syl { font-size: 11px; color: rgba(255,255,255,.55); }
+        .score-card.current {
+            border-color: #5a82dc; transform: scale(1.14);
+            background: rgba(90,130,220,.18); box-shadow: 0 0 24px rgba(90,130,220,.55);
+        }
+        .score-card.current .num { color: #bcd0ff; }
+        .score-card.done { border-color: rgba(72,200,130,.85); background: rgba(72,200,130,.16); }
+        .score-card.done .num, .score-card.done .syl { color: #88e0a0; }
+        .score-card.error {
+            border-color: rgba(255,90,90,.9); background: rgba(255,80,80,.14);
+            animation: shake .4s;
+        }
+        .score-card.error .num { color: #ff9a9a; }
+        @keyframes shake {
+            0%,100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        #learn-status {
+            position: fixed; top: 69%; left: 50%; transform: translateX(-50%);
+            color: rgba(255,255,255,.85); font-size: 17px; text-align: center;
+            white-space: nowrap; z-index: 15; letter-spacing: .5px;
+        }
+        #learn-btns {
+            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 14px; z-index: 15;
+        }
+        .lbtn {
+            padding: 11px 26px; border-radius: 999px; font-size: 14px; cursor: pointer;
+            border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.08);
+            color: #fff; transition: .2s;
+        }
+        .lbtn:hover { background: rgba(255,255,255,.18); }
+        .lbtn.primary { background: rgba(90,130,220,.92); border-color: transparent; }
+
+        /* ===== 创作模式：录制控制台 ===== */
+        #create-panel { display: none; }
+        body.create-mode #create-panel { display: block; }
+        body.create-mode #hint { opacity: 0 !important; }
+
+        #create-panel {
+            position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+            z-index: 15; width: 440px;
+            border-radius: 18px; padding: 15px 20px 13px;
+            background: rgba(18,18,22,.74); border: 1px solid rgba(255,255,255,.14);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 40px rgba(0,0,0,.55);
+            color: #fff;
+        }
+        #rec-status-row {
+            display: flex; align-items: center; gap: 10px;
+            margin-bottom: 12px; font-size: 13px; letter-spacing: .5px;
+        }
+        #rec-dot {
+            width: 11px; height: 11px; border-radius: 50%;
+            background: #666; flex: none; transition: background .2s;
+        }
+        #rec-dot.recording { background: #ff3b30; animation: recPulse 1s infinite; }
+        #rec-dot.paused    { background: #ffb020; }
+        #rec-dot.playing   { background: #34c759; animation: recPulse 1.2s infinite; }
+        @keyframes recPulse {
+            0%   { box-shadow: 0 0 0 0 rgba(255,59,48,.55); }
+            50%  { box-shadow: 0 0 0 9px rgba(255,59,48,0); }
+            100% { box-shadow: 0 0 0 0 rgba(255,59,48,0); }
+        }
+        #rec-time {
+            margin-left: auto; font-size: 15px;
+            font-variant-numeric: tabular-nums; color: rgba(255,255,255,.85);
+        }
+        #rec-btns { display: flex; gap: 10px; }
+        .rbtn {
+            flex: 1; padding: 10px 0; border-radius: 999px; font-size: 14px;
+            cursor: pointer; letter-spacing: 1px; color: #fff;
+            border: 1px solid rgba(255,255,255,.25);
+            background: rgba(255,255,255,.08); transition: .2s;
+        }
+        .rbtn:hover:not(:disabled) { background: rgba(255,255,255,.22); }
+        .rbtn:disabled { opacity: .32; cursor: not-allowed; }
+        .rbtn.rec    { background: rgba(255,59,48,.92); border-color: transparent; }
+        .rbtn.rec.live { box-shadow: 0 0 20px rgba(255,59,48,.75); }
+        .rbtn.pause  { background: rgba(255,176,32,.88); border-color: transparent; }
+        .rbtn.stop   { background: rgba(255,255,255,.12); }
+        .rbtn.play   { background: rgba(52,199,89,.92); border-color: transparent; }
+        .rbtn.play.live { box-shadow: 0 0 20px rgba(52,199,89,.75); }
+        #rec-seg-info {
+            margin-top: 10px; min-height: 16px;
+            font-size: 12px; text-align: center; color: rgba(255,255,255,.5);
+        }
+        #rec-seg-info.error { color: #ff9a9a; }
+    </style>
+</head>
+<body>
+    <!-- 启动界面 -->
+    <div id="start-screen">
+        <h1>手势音乐可视化 Demo</h1>
+        <p>张开五指手掌 → 音符 Do　·　伸出单个拇指 → 音符 Re<br>
+           含【探索 Explore】自由演奏 ·【学习 Learn】简谱跟练 ·【创作 Create】录制回放</p>
+        <button id="start-btn">启动摄像头</button>
+    </div>
+
+    <!-- 模式切换 -->
+    <div id="mode-tabs">
+        <button class="tab active" data-mode="explore">探索 Explore</button>
+        <button class="tab" data-mode="learn">学习 Learn</button>
+        <button class="tab" data-mode="create">创作 Create</button>
+    </div>
+
+    <!-- 摄像头预览 -->
+    <div id="video-container">
+        <video id="video" autoplay playsinline muted></video>
+        <div id="status">等待手势...</div>
+    </div>
+
+    <!-- 音符大字（探索模式） -->
+    <div id="note-display">Do</div>
+
+    <!-- 无效手势提示 -->
+    <div id="gesture-warning">未识别到有效手势</div>
+
+    <!-- 底部提示 -->
+    <div id="hint">张开五指手掌 → Do &nbsp;·&nbsp; 伸出单个拇指 → Re</div>
+
+    <!-- 手势示范小动画 -->
+    <div id="gesture-demo-label">手心正对摄像头做手势</div>
+    <div id="gesture-demo">
+        <img class="gd-do" src="assets/gesture-do.png" alt="张开手掌 Do">
+        <img class="gd-re" src="assets/gesture-re.png" alt="伸拇指 Re">
+    </div>
+
+    <!-- 学习模式面板 -->
+    <div id="learn-panel">
+        <div id="score-cards"></div>
+        <div id="learn-status"></div>
+        <div id="learn-btns">
+            <button id="demo-btn" class="lbtn primary">播放示范</button>
+            <button id="reset-btn" class="lbtn">重新开始</button>
+        </div>
+    </div>
+
+    <!-- 创作模式：录制控制台 -->
+    <div id="create-panel">
+        <div id="rec-status-row">
+            <span id="rec-dot"></span>
+            <span id="rec-state-text">待机</span>
+            <span id="rec-time">00:00.0</span>
+        </div>
+        <div id="rec-btns">
+            <button id="rec-btn"   class="rbtn rec">录制</button>
+            <button id="pause-btn" class="rbtn pause" disabled>暂停</button>
+            <button id="stop-btn"  class="rbtn stop" disabled>停止录制</button>
+            <button id="play-btn"  class="rbtn play" disabled>播放</button>
+        </div>
+        <div id="rec-seg-info">尚无录制片段</div>
+    </div>
+
+    <!-- MediaPipe 手势识别 -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <!-- Tone.js 音频 -->
+    <script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js" crossorigin="anonymous"></script>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+        }
+    }
+    </script>
+
+    <script type="module">
+import * as THREE from 'three';
+
+// ========== 参数配置 ==========
+const CONFIG = {
+    particleCount: 3000,
+    sphereRadius: 2,
+    shellThickness: 0.1,
+    floatAmplitude: 0.1,
+    rotationSpeed: 0.001,
+    particleSize: 0.02,
+    spreadAmount: 0.35,
+    smoothSpeed: 0.04
+};
+
+// ========== 基础场景 ==========
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.z = 5;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+document.body.appendChild(renderer.domElement);
+
+// ========== 球形粒子系统 ==========
+const geometry = new THREE.BufferGeometry();
+const positions = new Float32Array(CONFIG.particleCount * 3);
+const originalPositions = new Float32Array(CONFIG.particleCount * 3);
+const offsets = new Float32Array(CONFIG.particleCount * 3);
+
+for (let i = 0; i < CONFIG.particleCount; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    const r = CONFIG.sphereRadius + (Math.random() - 0.5) * CONFIG.shellThickness;
+
+    const x = r * Math.sin(phi) * Math.cos(theta);
+    const y = r * Math.cos(phi);
+    const z = r * Math.sin(phi) * Math.sin(theta);
+
+    positions[i*3] = x; positions[i*3+1] = y; positions[i*3+2] = z;
+    originalPositions[i*3] = x; originalPositions[i*3+1] = y; originalPositions[i*3+2] = z;
+
+    offsets[i*3] = Math.random() * Math.PI * 2;
+    offsets[i*3+1] = Math.random() * Math.PI * 2;
+    offsets[i*3+2] = Math.random() * Math.PI * 2;
+}
+geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+const material = new THREE.PointsMaterial({
+    color: 0xffffff,
+    size: CONFIG.particleSize,
+    transparent: true,
+    opacity: 0.8,
+    blending: THREE.AdditiveBlending,
+    sizeAttenuation: true
+});
+
+const particleSphere = new THREE.Points(geometry, material);
+scene.add(particleSphere);
+
+// ========== 视觉状态 ==========
+let activeNote = null;   // 探索模式当前长音：'do' | 're' | null
+let exploreLevel = 0;    // 探索模式持续张开级别
+let pulse = 0;           // 学习模式单次脉冲
+let pulseNote = 'do';    // 学习模式脉冲对应音符（含 'err'）
+let mode = 'explore';
+
+const colorWhite = new THREE.Color(0xffffff);
+const colorWarm  = new THREE.Color(0xffe2a8);
+const colorRe    = new THREE.Color(0x1e90ff);
+const colorErr   = new THREE.Color(0xff5a5a);
+const noteEl = document.getElementById('note-display');
+
+// ========== 动画循环 ==========
+const clock = new THREE.Clock();
+
+function animate() {
+    requestAnimationFrame(animate);
+    const time = clock.getElapsedTime();
+
+    // 根据模式计算视觉级别与颜色（探索/创作共用长音视觉；学习模式用脉冲）
+    let level, colorNote;
+    if (mode === 'explore' || mode === 'create') {
+        const t = activeNote ? 1 : 0;
+        exploreLevel += (t - exploreLevel) * CONFIG.smoothSpeed;
+        if (Math.abs(t - exploreLevel) < 0.002) exploreLevel = t;
+        level = exploreLevel;
+        colorNote = activeNote || 'do';
+    } else {
+        pulse += (0 - pulse) * 0.09;
+        if (pulse < 0.002) pulse = 0;
+        level = pulse;
+        colorNote = pulseNote;
+    }
+
+    particleSphere.rotation.y += CONFIG.rotationSpeed;
+
+    const spreadScale = 1 + level * CONFIG.spreadAmount;
+    const pos = geometry.attributes.position.array;
+    for (let i = 0; i < CONFIG.particleCount; i++) {
+        const idx = i * 3;
+        const fx = Math.sin(time * 0.8 + offsets[idx])     * CONFIG.floatAmplitude * 0.3;
+        const fy = Math.sin(time * 0.6 + offsets[idx + 1]) * CONFIG.floatAmplitude;
+        const fz = Math.sin(time * 0.7 + offsets[idx + 2]) * CONFIG.floatAmplitude * 0.3;
+
+        pos[idx]     = (originalPositions[idx]     + fx) * spreadScale;
+        pos[idx + 1] = (originalPositions[idx + 1] + fy) * spreadScale;
+        pos[idx + 2] = (originalPositions[idx + 2] + fz) * spreadScale;
+    }
+    geometry.attributes.position.needsUpdate = true;
+
+    let target;
+    if (mode === 'learn' && colorNote === 'err') target = colorErr;
+    else if (colorNote === 're') target = colorRe;
+    else target = colorWarm;
+    material.color.copy(colorWhite).lerp(target, level);
+    material.size = CONFIG.particleSize * (1 + level * 0.7);
+    material.opacity = 0.8 + level * 0.15;
+
+    noteEl.style.opacity = (mode === 'explore' || mode === 'create') ? exploreLevel : 0;
+
+    renderer.render(scene, camera);
+}
+animate();
+
+// ========== 手势识别 ==========
+const videoEl = document.getElementById('video');
+const statusEl = document.getElementById('status');
+const warningEl = document.getElementById('gesture-warning');
+
+const dist3d = (a, b) =>
+    Math.hypot(a.x - b.x, a.y - b.y, (a.z || 0) - (b.z || 0));
+
+function isOpenPalm(lm) {
+    const wrist = lm[0];
+    const fourFingers = [[8,6], [12,10], [16,14], [20,18]];
+    const fingersExtended = fourFingers.every(([tip, pip]) =>
+        dist3d(lm[tip], wrist) > dist3d(lm[pip], wrist) * 1.05);
+    const palmWidth = dist3d(lm[5], lm[17]);
+    const thumbExtended = dist3d(lm[4], lm[17]) > palmWidth * 0.95;
+    return fingersExtended && thumbExtended;
+}
+
+function isThumbOnly(lm) {
+    const wrist = lm[0];
+    const palmWidth = dist3d(lm[5], lm[17]);
+    const othersFolded = [[8,6], [12,10], [16,14], [20,18]]
+        .every(([tip, pip]) => dist3d(lm[tip], wrist) < dist3d(lm[pip], wrist));
+    const thumbExtended =
+        dist3d(lm[4], wrist) > dist3d(lm[2], wrist) * 1.1 &&
+        dist3d(lm[4], lm[5]) > palmWidth * 0.55;
+    return othersFolded && thumbExtended;
+}
+
+// 音符外观与音高配置
+const NOTE_STYLES = {
+    do: { text: 'Do', pitch: 'C4', color: '#ffe9b0',
+          glow: '0 0 40px rgba(255,200,120,.85), 0 0 120px rgba(255,170,70,.5)' },
+    re: { text: 'Re', pitch: 'D4', color: '#9fcdff',
+          glow: '0 0 40px rgba(30,144,255,.85), 0 0 120px rgba(70,150,255,.5)' }
+};
+
+function applyNoteStyle(note) {
+    if (!note) return;
+    const s = NOTE_STYLES[note];
+    noteEl.textContent = s.text;
+    noteEl.style.color = s.color;
+    noteEl.style.textShadow = s.glow;
+}
+
+let synth = null;
+
+// 仅切换视觉状态（粒子球级别 + 音符大字），不发声；实时演奏与回放共用
+function setVisualNote(note) {
+    activeNote = note;
+    applyNoteStyle(note);
+}
+
+// 实时演奏：长音起音/释音，同时写入录制时间轴
+function setActiveNote(note) {
+    if (note === activeNote) return;
+    const prev = activeNote;
+
+    if (synth) {
+        if (note === null) {
+            synth.triggerRelease();
+        } else if (prev === null) {
+            synth.triggerAttack(NOTE_STYLES[note].pitch);
+        } else {
+            synth.triggerRelease();
+            synth.triggerAttack(NOTE_STYLES[note].pitch);
+        }
+    }
+
+    // 录制事件（仅在真正录制中写入；暂停期间不记录，与 MediaRecorder.pause 语义一致）
+    if (note === null) {
+        logRecEvent('release');
+    } else if (prev === null) {
+        logRecEvent('attack', note);
+    } else {
+        logRecEvent('release');
+        logRecEvent('attack', note);
+    }
+
+    setVisualNote(note);
+}
+
+// ========== 防抖状态机（输出 stableGesture） ==========
+let stableGesture = 'none';   // 'do' | 're' | 'none'
+let candidate = null;
+let candFrames = 0;
+
+function onGestureChange(g) {
+    const note = g === 'none' ? null : g;
+    if (mode === 'learn') {
+        learnOnGesture(note);
+    } else if (mode === 'create') {
+        // 回放期间手势不触发声音，避免与回放音频叠加
+        if (playState !== 'playing') setActiveNote(note);
+    } else {
+        setActiveNote(note);
+    }
+}
+
+function onResults(results) {
+    const lm = results.multiHandLandmarks && results.multiHandLandmarks[0];
+
+    let raw = 'none';
+    if (lm) {
+        if (isOpenPalm(lm)) raw = 'do';
+        else if (isThumbOnly(lm)) raw = 're';
+    }
+
+    // 音符确认需连续3帧；释放（none）需连续5帧
+    if (raw === stableGesture) {
+        candidate = null; candFrames = 0;
+    } else if (raw === candidate) {
+        candFrames++;
+        const need = raw === 'none' ? 5 : 3;
+        if (candFrames >= need) {
+            stableGesture = raw; candidate = null; candFrames = 0;
+            onGestureChange(stableGesture);
+        }
+    } else {
+        candidate = raw; candFrames = 1;
+    }
+
+    // 摄像头状态文字
+    if (!lm) statusEl.textContent = '未检测到手';
+    else if (stableGesture === 'do') statusEl.textContent = '张开手掌 ✓ Do';
+    else if (stableGesture === 're') statusEl.textContent = '伸拇指 ✓ Re';
+    else statusEl.textContent = '调整手势...';
+
+    // 探索/创作模式无效手势提示（回放中不显示）
+    warningEl.classList.toggle('show',
+        (mode === 'explore' || mode === 'create') &&
+        playState !== 'playing' && !!lm && stableGesture === 'none');
+}
+
+// ========== 学习模式逻辑 ==========
+// 仅用 Do、Re 两个音符组成 6 音练习；简谱：Do=1，Re=2
+const SEQUENCE = ['do','re','do','re','do','do'];
+const NUM = { do: '1', re: '2' };
+const cardsEl = document.getElementById('score-cards');
+const learnStatusEl = document.getElementById('learn-status');
+const cardEls = [];
+
+SEQUENCE.forEach((n) => {
+    const c = document.createElement('div');
+    c.className = 'score-card';
+    c.innerHTML = '<span class="num">' + NUM[n] + '</span>' +
+                  '<span class="syl">' + NOTE_STYLES[n].text + '</span>';
+    cardsEl.appendChild(c);
+    cardEls.push(c);
+});
+
+let learnState = 'idle';   // idle | demo | practice | done
+let lStep = 0, lWrong = 0, lCanSubmit = false;
+const wait = (ms) => new Promise(r => setTimeout(r, ms));
+
+function resetCards() {
+    cardEls.forEach(c => c.className = 'score-card');
+}
+
+function startPracticeUI() {
+    resetCards();
+    cardEls[0].classList.add('current');
+    learnState = 'practice';
+    lStep = 0; lWrong = 0; lCanSubmit = true;
+    learnStatusEl.textContent = '请演奏第 1 个音符：张开手掌=Do，伸拇指=Re';
+}
+
+function enterLearn() {
+    startPracticeUI();
+}
+
+async function playDemo() {
+    if (learnState === 'demo') return;
+    learnState = 'demo';
+    resetCards();
+    learnStatusEl.textContent = '示范演奏中，请观察简谱与粒子...';
+    for (let i = 0; i < SEQUENCE.length; i++) {
+        cardEls[i].classList.add('current');
+        pulse = 1; pulseNote = SEQUENCE[i];
+        synth.triggerAttackRelease(NOTE_STYLES[SEQUENCE[i]].pitch, '4n');
+        await wait(430);
+        cardEls[i].classList.remove('current');
+        if (learnState !== 'demo') return;  // 被模式切换打断
+    }
+    startPracticeUI();
+}
+
+function learnOnGesture(g) {
+    if (learnState !== 'practice') return;
+    if (g === null) {
+        lCanSubmit = true;
+        cardEls[lStep].classList.remove('error');
+        return;
+    }
+    if (!lCanSubmit) return;
+    lCanSubmit = false;
+
+    const expected = SEQUENCE[lStep];
+    const card = cardEls[lStep];
+
+    if (g === expected) {
+        synth.triggerAttackRelease(NOTE_STYLES[g].pitch, '4n');
+        pulse = 1; pulseNote = g;
+        card.classList.remove('current', 'error');
+        card.classList.add('done');
+        lStep++;
+        if (lStep >= SEQUENCE.length) {
+            finishLearn();
+        } else {
+            cardEls[lStep].classList.add('current');
+            learnStatusEl.textContent = '正确！抬手后演奏第 ' + (lStep + 1) + ' 个音符';
+        }
+    } else {
+        card.classList.add('error');
+        pulse = 0.5; pulseNote = 'err';
+        lWrong++;
+        const hint = expected === 'do' ? 'Do（张开手掌）' : 'Re（伸拇指）';
+        learnStatusEl.textContent = '这个音应是 ' + hint + '，抬手再试';
+    }
+}
+
+function finishLearn() {
+    learnState = 'done';
+    cardEls.forEach(c => c.className = 'score-card done');
+    const acc = Math.round(SEQUENCE.length / (SEQUENCE.length + lWrong) * 100);
+    learnStatusEl.textContent = '完成！本次正确率 ' + acc + '%，可点击“重新开始”再练';
+}
+
+document.getElementById('demo-btn').addEventListener('click', () => {
+    if (synth) playDemo();
+});
+document.getElementById('reset-btn').addEventListener('click', () => {
+    if (synth) startPracticeUI();
+});
+
+// ========== 创作模式：录制 / 暂停 / 停止 / 回放 ==========
+const recBtn     = document.getElementById('rec-btn');
+const pauseBtn   = document.getElementById('pause-btn');
+const stopBtn    = document.getElementById('stop-btn');
+const playBtn    = document.getElementById('play-btn');
+const recDot     = document.getElementById('rec-dot');
+const recStateTx = document.getElementById('rec-state-text');
+const recTimeEl  = document.getElementById('rec-time');
+const segInfoEl  = document.getElementById('rec-seg-info');
+
+let mediaDest = null;       // 合成器内录目标（MediaStreamAudioDestinationNode）
+let recorder = null;        // MediaRecorder
+let pauseSupported = false;
+
+let recState = 'idle';      // idle | recording | paused（UI 与底层状态双重守卫）
+let playState = 'idle';     // idle | playing
+let recChunks = [];
+let recEvents = [];         // 音符事件时间轴：{ t, type:'attack'|'release', note }
+let recBaseMs = 0;          // 已确认的有效录制时长（暂停时刻累加）
+let recSegStart = 0;        // 本次连续录制段起点
+let recTick = null;
+const recordings = [];      // 录制片段临时保存在应用状态中
+let lastSegment = null;
+
+let playAudio = null;
+let playIv = null;
+
+function fmtTime(ms) {
+    const t = Math.max(0, ms / 1000);
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60);
+    const d = Math.floor((t * 10) % 10);
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0') + '.' + d;
+}
+
+function segInfo(text, isError) {
+    segInfoEl.textContent = text;
+    segInfoEl.classList.toggle('error', !!isError);
+}
+
+// 当前有效录制时间（自动扣除暂停区间，作为计时与事件时间戳的单一真值）
+function recNow() {
+    return recState === 'recording'
+        ? recBaseMs + (performance.now() - recSegStart)
+        : recBaseMs;
+}
+
+function logRecEvent(type, note) {
+    if (recState !== 'recording') return;
+    recEvents.push({ t: recNow(), type, note: note || null });
+}
+
+// 录音器初始化（在音频上下文启动后调用）
+function initRecorder() {
+    if (recorder) return;
+    if (typeof MediaRecorder === 'undefined') {
+        segInfo('当前浏览器不支持 MediaRecorder 录音 API', true);
+        recBtn.disabled = true;
+        return;
+    }
+    pauseSupported = typeof MediaRecorder.prototype.pause === 'function';
+
+    let mime;
+    for (const candidate of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']) {
+        if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(candidate)) {
+            mime = candidate; break;
+        }
+    }
+    try {
+        recorder = new MediaRecorder(mediaDest.stream, mime ? { mimeType: mime } : undefined);
+    } catch (err) {
+        segInfo('录音初始化失败：' + err.message, true);
+        recBtn.disabled = true;
+        return;
+    }
+
+    recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) recChunks.push(e.data);
+    };
+    recorder.onstop = onRecorderStopped;
+    recorder.onerror = (e) => {
+        segInfo('录音出错：' + ((e.error && e.error.name) || '未知错误'), true);
+    };
+    updateRecUI();
+}
+
+function startRecording() {
+    if (!recorder || recState !== 'idle' || playState !== 'idle') return;
+
+    recChunks = [];
+    recEvents = [];
+    recBaseMs = 0;
+    recSegStart = performance.now();
+    recTimeEl.textContent = '00:00.0';
+
+    // 录制开始瞬间若音符正在响，补记一个 attack，保证回放头尾完整
+    if (activeNote) recEvents.push({ t: 0, type: 'attack', note: activeNote });
+
+    try {
+        recorder.start(250);   // 每 250ms 切片
+    } catch (err) {
+        segInfo('启动录音失败：' + err.message, true);
+        return;
+    }
+    recState = 'recording';
+    recTick = setInterval(() => { recTimeEl.textContent = fmtTime(recNow()); }, 100);
+    segInfo('录制中…用手势演奏 Do / Re，可随时暂停');
+    updateRecUI();
+}
+
+function togglePause() {
+    if (!recorder) return;
+    if (recState === 'recording' && recorder.state === 'recording') {
+        if (!pauseSupported) {
+            segInfo('当前浏览器不支持暂停录音，请直接停止并保存', true);
+            return;
+        }
+        try { recorder.pause(); } catch (err) {
+            segInfo('暂停失败：' + err.message, true); return;
+        }
+        recBaseMs += performance.now() - recSegStart;
+        recState = 'paused';
+        clearInterval(recTick);
+        segInfo('已暂停 — 点击「继续」恢复录制');
+    } else if (recState === 'paused' && recorder.state === 'paused') {
+        try { recorder.resume(); } catch (err) {
+            segInfo('继续失败：' + err.message, true); return;
+        }
+        recSegStart = performance.now();
+        recState = 'recording';
+        recTick = setInterval(() => { recTimeEl.textContent = fmtTime(recNow()); }, 100);
+        segInfo('录制继续…');
+    }
+    updateRecUI();
+}
+
+function stopRecording() {
+    if (!recorder || recState === 'idle') return;
+    if (recState === 'recording' && recorder.state === 'recording') {
+        recBaseMs += performance.now() - recSegStart;
+    }
+    clearInterval(recTick);
+    recTick = null;
+    recState = 'idle';
+    recTimeEl.textContent = '00:00.0';
+    try {
+        if (recorder.state !== 'inactive') recorder.stop();
+    } catch (err) {
+        segInfo('停止录音失败：' + err.message, true);
+    }
+    updateRecUI();
+}
+
+// MediaRecorder 停止后：组装 Blob，作为离散片段保存到应用状态
+function onRecorderStopped() {
+    const duration = recBaseMs;
+    if (!recChunks.length) {
+        segInfo('没有录制到内容，该片段未保存', true);
+        updateRecUI();
+        return;
+    }
+    const type = recorder.mimeType || 'audio/webm';
+    const blob = new Blob(recChunks, { type });
+    if (blob.size < 200) {
+        segInfo('录制内容过短，该片段未保存', true);
+        updateRecUI();
+        return;
+    }
+    const segment = {
+        id: Date.now(),
+        blob,
+        url: URL.createObjectURL(blob),
+        duration,
+        events: recEvents.slice()
+    };
+    recordings.push(segment);
+    lastSegment = segment;
+    segInfo('已保存片段 #' + recordings.length + '（时长 ' + fmtTime(duration) +
+            '），点击「播放」回放最近片段');
+    updateRecUI();
+}
+
+function playLastSegment() {
+    if (!lastSegment || playState === 'playing' || recState !== 'idle') return;
+    const seg = lastSegment;
+
+    setVisualNote(null);
+    const audio = new Audio(seg.url);
+    playAudio = audio;
+    let idx = 0;
+
+    const finish = (msg, isError) => {
+        if (playIv) { clearInterval(playIv); playIv = null; }
+        if (playAudio) { playAudio = null; }
+        setVisualNote(null);
+        playState = 'idle';
+        recTimeEl.textContent = '00:00.0';
+        if (msg) segInfo(msg, isError);
+        updateRecUI();
+    };
+
+    audio.onended = () => finish('回放结束 — 可再次播放或录制新片段');
+    audio.onerror = () => finish('回放失败：音频解码异常', true);
+
+    playState = 'playing';
+    segInfo('回放中…粒子与音符随录音同步');
+    updateRecUI();
+
+    audio.play().then(() => {
+        // 以音频实际播放时间为基准重放音符事件，保证声画同步
+        playIv = setInterval(() => {
+            const t = audio.currentTime * 1000;
+            while (idx < seg.events.length && seg.events[idx].t <= t) {
+                const ev = seg.events[idx++];
+                if (ev.type === 'attack') setVisualNote(ev.note);
+                else setVisualNote(null);
+            }
+            recTimeEl.textContent = fmtTime(t);
+        }, 30);
+    }).catch(err => finish('无法播放录音：' + err.message, true));
+}
+
+function stopPlayback() {
+    if (playState !== 'playing') return;
+    if (playIv) { clearInterval(playIv); playIv = null; }
+    if (playAudio) {
+        const a = playAudio; playAudio = null;
+        try { a.pause(); a.currentTime = 0; } catch {}
+    }
+    setVisualNote(null);
+    playState = 'idle';
+    recTimeEl.textContent = '00:00.0';
+    updateRecUI();
+}
+
+// 按钮、状态灯、文案的统一刷新（状态变化的单一出口）
+function updateRecUI() {
+    recBtn.disabled   = !recorder || recState !== 'idle' || playState !== 'idle';
+    pauseBtn.disabled = !(recState === 'recording' || recState === 'paused');
+    pauseBtn.textContent = recState === 'paused' ? '继续' : '暂停';
+    stopBtn.disabled  = recState === 'idle';
+    playBtn.disabled  = !lastSegment || recState !== 'idle' || playState !== 'idle';
+    playBtn.textContent = playState === 'playing' ? '播放中' : '播放';
+
+    recBtn.classList.toggle('live', recState === 'recording');
+    playBtn.classList.toggle('live', playState === 'playing');
+
+    recDot.className = recState !== 'idle' ? recState
+                     : (playState === 'playing' ? 'playing' : '');
+    if (recState === 'recording') recStateTx.textContent = '录制中';
+    else if (recState === 'paused') recStateTx.textContent = '已暂停';
+    else if (playState === 'playing') recStateTx.textContent = '回放中';
+    else recStateTx.textContent = '待机';
+}
+
+recBtn.addEventListener('click', startRecording);
+pauseBtn.addEventListener('click', togglePause);
+stopBtn.addEventListener('click', stopRecording);
+playBtn.addEventListener('click', playLastSegment);
+updateRecUI();
+
+// ========== 模式切换 ==========
+const tabEls = document.querySelectorAll('.tab');
+tabEls.forEach(t => t.addEventListener('click', () => switchMode(t.dataset.mode)));
+
+function switchMode(m) {
+    if (m === mode) return;
+    const prev = mode;
+    setActiveNote(null);   // 释放探索/创作模式长音（同时写入录制事件）
+    mode = m;
+    document.body.classList.toggle('learn-mode', m === 'learn');
+    document.body.classList.toggle('create-mode', m === 'create');
+    tabEls.forEach(t => t.classList.toggle('active', t.dataset.mode === m));
+    if (m === 'learn') {
+        enterLearn();
+    } else {
+        learnState = 'idle';
+        pulse = 0;
+    }
+    // 离开创作模式：录制自动停止并保存片段，回放中止
+    if (prev === 'create') {
+        if (recState !== 'idle') stopRecording();
+        stopPlayback();
+    }
+}
+
+// ========== START BUTTON (instrumented) ==========
+window.__boot = [];
+const bootLog = (m) => { window.__boot.push(String(m)); };
+document.getElementById('start-btn').addEventListener('click', async () => {
+    bootLog('click fired');
+    Tone.start().then(() => bootLog('tone ok')).catch(e => bootLog('tone err ' + e.message));
+    try {
+        bootLog('before getUserMedia');
+        const gum = navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        const timer = new Promise((_, rej) => setTimeout(() => rej(new Error('getUserMedia timeout')), 6000));
+        const stream = await Promise.race([gum, timer]);
+        bootLog('got stream');
+        videoEl.srcObject = stream;
+        await videoEl.play();
+        bootLog('video playing');
+
+        synth = new Tone.Synth({
+            oscillator: { type: 'triangle' },
+            envelope: { attack: 0.08, decay: 0.3, sustain: 0.6, release: 0.8 }
+        });
+        synth.volume.value = -14;
+        const freeverb = new Tone.Freeverb({ roomSize: 0.5, wet: 0.2 }).toDestination();
+        synth.connect(freeverb);
+        synth.toDestination();
+
+        // 内录目标：合成器的干声与混响并行送入 MediaStream（与扬声器听到的完全一致）
+        // 录制的是应用内部生成的音乐，无需麦克风权限
+        mediaDest = Tone.getContext().rawContext.createMediaStreamDestination();
+        synth.connect(mediaDest);
+        freeverb.connect(mediaDest);
+        initRecorder();
+
+        const hands = new Hands({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+        });
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.6 });
+        hands.onResults(onResults);
+
+        const sendFrame = async () => {
+            if (videoEl.readyState >= 2) {
+                try { await hands.send({ image: videoEl }); } catch (e) {}
+            }
+            requestAnimationFrame(sendFrame);
+        };
+        sendFrame();
+
+        const startScreen = document.getElementById('start-screen');
+        startScreen.style.opacity = '0';
+        setTimeout(() => startScreen.style.display = 'none', 500);
+        document.getElementById('video-container').classList.add('active');
+        document.getElementById('hint').classList.add('active');
+        document.getElementById('mode-tabs').classList.add('active');
+        document.getElementById('gesture-demo').classList.add('active');
+        document.getElementById('gesture-demo-label').classList.add('active');
+        bootLog('ui shown');
+    } catch (err) {
+        bootLog('CATCH ' + err.name + ' ' + err.message);
+        const s = document.getElementById('status');
+        if (s) s.textContent = 'Boot error: ' + err.message;
+    }
+});
+
+// ========== 窗口自适应 ==========
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+    </script>
+</body>
+</html>
