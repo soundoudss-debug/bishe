@@ -83,7 +83,7 @@
         }
         #hint.active { opacity: 1; }
 
-        /* 手势示范小动画（左下角，两帧循环） */
+        /* 手势示范小动画（左下角，七帧循环轮播） */
         #gesture-demo-label {
             position: fixed; left: 20px; bottom: 178px; width: 150px; z-index: 12;
             text-align: center; color: rgba(255,255,255,.82); font-size: 12px;
@@ -99,18 +99,14 @@
         #gesture-demo.active, #gesture-demo-label.active { opacity: 1; }
         #gesture-demo img {
             position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+            opacity: 0; transition: opacity .35s;
         }
-        .gd-do { animation: gdDo 2.8s infinite; }
-        .gd-re { animation: gdRe 2.8s infinite; }
-        @keyframes gdDo {
-            0%,45% { opacity: 1; }
-            50%,95% { opacity: 0; }
-            100% { opacity: 1; }
-        }
-        @keyframes gdRe {
-            0%,45% { opacity: 0; }
-            50%,95% { opacity: 1; }
-            100% { opacity: 0; }
+        #gesture-demo img.show { opacity: 1; }
+        #gd-caption {
+            position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
+            height: 26px; display: flex; align-items: center; justify-content: center;
+            background: rgba(255,255,255,.96); border-top: 1px solid rgba(0,0,0,.12);
+            font-size: 12px; color: #111; letter-spacing: .3px;
         }
 
         /* ===== 学习模式 ===== */
@@ -230,8 +226,8 @@
     <!-- 启动界面 -->
     <div id="start-screen">
         <h1>手势音乐可视化 Demo</h1>
-        <p>张开五指手掌 → 音符 Do　·　伸出单个拇指 → 音符 Re<br>
-           含【探索 Explore】自由演奏 ·【学习 Learn】简谱跟练 ·【创作 Create】录制回放</p>
+        <p>手心正对摄像头：Do-五指 · Re-拇指 · Mi-食指 · Fa-食中指 · Sol-三指 · La-四指 · Si-小指<br>
+           每奏一音后先握拳复位，再奏下一音　|　探索 Explore · 学习 Learn · 创作 Create</p>
         <button id="start-btn">启动摄像头</button>
     </div>
 
@@ -255,13 +251,19 @@
     <div id="gesture-warning">未识别到有效手势</div>
 
     <!-- 底部提示 -->
-    <div id="hint">张开五指手掌 → Do &nbsp;·&nbsp; 伸出单个拇指 → Re</div>
+    <div id="hint">Do-五指 · Re-拇指 · Mi-食指 · Fa-食中指 · Sol-三指 · La-四指 · Si-小指　|　每音后先握拳复位</div>
 
     <!-- 手势示范小动画 -->
     <div id="gesture-demo-label">手心正对摄像头做手势</div>
     <div id="gesture-demo">
-        <img class="gd-do" src="assets/gesture-do.png" alt="张开手掌 Do">
-        <img class="gd-re" src="assets/gesture-re.png" alt="伸拇指 Re">
+        <img class="show" src="assets/gesture-do.png" alt="Do 五指张开">
+        <img src="assets/gesture-re.png" alt="Re 伸拇指">
+        <img src="assets/gesture-mi.png" alt="Mi 伸食指">
+        <img src="assets/gesture-fa.png" alt="Fa 食指中指伸出">
+        <img src="assets/gesture-sol.png" alt="Sol 食指中指无名指三指">
+        <img src="assets/gesture-la.png" alt="La 四指伸出">
+        <img src="assets/gesture-si.png" alt="Si 伸小指">
+        <div id="gd-caption">Do-五指</div>
     </div>
 
     <!-- 学习模式面板 -->
@@ -378,6 +380,14 @@ const colorRe    = new THREE.Color(0x1e90ff);
 const colorErr   = new THREE.Color(0xff5a5a);
 const noteEl = document.getElementById('note-display');
 
+// 各音符对应的粒子球颜色（须在 animate() 启动前定义）
+const NOTE_PARTICLE_COLORS = {
+    do: new THREE.Color(0xffe2a8), re: new THREE.Color(0x1e90ff),
+    mi: new THREE.Color(0xffa060), fa: new THREE.Color(0x40d080),
+    sol: new THREE.Color(0xb070ff), la: new THREE.Color(0xffd040),
+    si: new THREE.Color(0xff609a)
+};
+
 // ========== 动画循环 ==========
 const clock = new THREE.Clock();
 
@@ -418,8 +428,7 @@ function animate() {
 
     let target;
     if (mode === 'learn' && colorNote === 'err') target = colorErr;
-    else if (colorNote === 're') target = colorRe;
-    else target = colorWarm;
+    else target = NOTE_PARTICLE_COLORS[colorNote] || colorWarm;
     material.color.copy(colorWhite).lerp(target, level);
     material.size = CONFIG.particleSize * (1 + level * 0.7);
     material.opacity = 0.8 + level * 0.15;
@@ -459,12 +468,56 @@ function isThumbOnly(lm) {
     return othersFolded && thumbExtended;
 }
 
-// 音符外观与音高配置
+// 单根手指是否伸展：指尖到手腕距离 > 指根(PIP)到手腕距离 × 1.05
+function fingerExtended(lm, tip, pip) {
+    const wrist = lm[0];
+    return dist3d(lm[tip], wrist) > dist3d(lm[pip], wrist) * 1.05;
+}
+
+// 拇指是否收拢（Mi-Si 各姿势与拳头均要求拇指收拢）
+function isThumbFolded(lm) {
+    const wrist = lm[0];
+    const palmWidth = dist3d(lm[5], lm[17]);
+    return dist3d(lm[4], lm[5]) < palmWidth * 0.55 ||
+           dist3d(lm[4], wrist) < dist3d(lm[2], wrist) * 1.1;
+}
+
+// 基于四指（食指/中指/无名指/小指）伸展组合的精细分类
+function classifyFingerCombo(lm) {
+    if (!isThumbFolded(lm)) return 'none';
+    const key = [
+        fingerExtended(lm, 8, 6),
+        fingerExtended(lm, 12, 10),
+        fingerExtended(lm, 16, 14),
+        fingerExtended(lm, 20, 18)
+    ].map(v => v ? 1 : 0).join('');
+    const map = {
+        '1000': 'mi',
+        '1100': 'fa',
+        '1110': 'sol',
+        '1111': 'la',
+        '0001': 'si',
+        '0000': 'fist'
+    };
+    return map[key] || 'none';
+}
+
+// 音符外观与音高配置（Do-Re-Mi-Fa-Sol-La-Si 七音）
 const NOTE_STYLES = {
-    do: { text: 'Do', pitch: 'C4', color: '#ffe9b0',
-          glow: '0 0 40px rgba(255,200,120,.85), 0 0 120px rgba(255,170,70,.5)' },
-    re: { text: 'Re', pitch: 'D4', color: '#9fcdff',
-          glow: '0 0 40px rgba(30,144,255,.85), 0 0 120px rgba(70,150,255,.5)' }
+    do:  { text: 'Do', pitch: 'C4', color: '#ffe9b0',
+           glow: '0 0 40px rgba(255,200,120,.85), 0 0 120px rgba(255,170,70,.5)' },
+    re:  { text: 'Re', pitch: 'D4', color: '#9fcdff',
+           glow: '0 0 40px rgba(30,144,255,.85), 0 0 120px rgba(70,150,255,.5)' },
+    mi:  { text: 'Mi', pitch: 'E4', color: '#ffc99a',
+           glow: '0 0 40px rgba(255,170,110,.85), 0 0 120px rgba(255,140,80,.5)' },
+    fa:  { text: 'Fa', pitch: 'F4', color: '#a8ecc0',
+           glow: '0 0 40px rgba(90,220,140,.85), 0 0 120px rgba(60,190,120,.5)' },
+    sol: { text: 'Sol', pitch: 'G4', color: '#d6b6ff',
+           glow: '0 0 40px rgba(180,130,255,.85), 0 0 120px rgba(150,100,240,.5)' },
+    la:  { text: 'La', pitch: 'A4', color: '#ffe27a',
+           glow: '0 0 40px rgba(255,210,90,.85), 0 0 120px rgba(240,180,60,.5)' },
+    si:  { text: 'Si', pitch: 'B4', color: '#ffadc8',
+           glow: '0 0 40px rgba(255,130,170,.85), 0 0 120px rgba(240,100,150,.5)' }
 };
 
 function applyNoteStyle(note) {
@@ -513,9 +566,10 @@ function setActiveNote(note) {
 }
 
 // ========== 防抖状态机（输出 stableGesture） ==========
-let stableGesture = 'none';   // 'do' | 're' | 'none'
+let stableGesture = 'none';   // 'do'..'si' | 'fist' | 'none'
 let candidate = null;
 let candFrames = 0;
+let armed = true;             // 拳头复位门控：true 时才允许演奏下一音
 
 function onGestureChange(g) {
     const note = g === 'none' ? null : g;
@@ -530,15 +584,16 @@ function onGestureChange(g) {
 }
 
 function onResults(results) {
-    const lm = results.multiHandLandmarks && results.multiHandLandmarks[0];
+    const landmarks = results.multiHandLandmarks && results.multiHandLandmarks[0];
 
     let raw = 'none';
-    if (lm) {
-        if (isOpenPalm(lm)) raw = 'do';
-        else if (isThumbOnly(lm)) raw = 're';
+    if (landmarks) {
+        if (isOpenPalm(landmarks)) raw = 'do';
+        else if (isThumbOnly(landmarks)) raw = 're';
+        else raw = classifyFingerCombo(landmarks);
     }
 
-    // 音符确认需连续3帧；释放（none）需连续5帧
+    // 音符/拳头确认需连续3帧；无效（none）需连续5帧
     if (raw === stableGesture) {
         candidate = null; candFrames = 0;
     } else if (raw === candidate) {
@@ -546,28 +601,62 @@ function onResults(results) {
         const need = raw === 'none' ? 5 : 3;
         if (candFrames >= need) {
             stableGesture = raw; candidate = null; candFrames = 0;
-            onGestureChange(stableGesture);
+            dispatchGesture(stableGesture);
         }
     } else {
         candidate = raw; candFrames = 1;
     }
 
     // 摄像头状态文字
-    if (!lm) statusEl.textContent = '未检测到手';
-    else if (stableGesture === 'do') statusEl.textContent = '张开手掌 ✓ Do';
-    else if (stableGesture === 're') statusEl.textContent = '伸拇指 ✓ Re';
+    if (!landmarks) statusEl.textContent = '未检测到手';
+    else if (stableGesture === 'fist') statusEl.textContent = '拳头复位 ✓ 可奏下一音';
+    else if (NOTE_STYLES[stableGesture]) {
+        statusEl.textContent = armed
+            ? NOTE_STYLES[stableGesture].text + ' ✓'
+            : NOTE_STYLES[stableGesture].text + ' ✓ 请握拳复位';
+    }
+    else if (!armed) statusEl.textContent = '请先握拳复位，再奏下一音';
     else statusEl.textContent = '调整手势...';
 
     // 探索/创作模式无效手势提示（回放中不显示）
     warningEl.classList.toggle('show',
         (mode === 'explore' || mode === 'create') &&
-        playState !== 'playing' && !!lm && stableGesture === 'none');
+        playState !== 'playing' && !!landmarks && stableGesture === 'none');
 }
 
+// 复位门控层：拳头（fist）复位并释音；音符仅在 armed 时触发，防止连续误触
+function dispatchGesture(g) {
+    if (g === 'fist') {
+        armed = true;
+        onGestureChange(null);
+    } else if (g === 'none') {
+        // 无效姿势：不发声，不改变门控状态
+    } else if (armed) {
+        armed = false;
+        onGestureChange(g);
+    }
+}
+
+// ========== 左下角七手势指导图轮播（图片与文字条同步） ==========
+const GD_CAPTIONS = ['Do-五指','Re-拇指','Mi-食指','Fa-食中指','Sol-三指','La-四指','Si-小指'];
+const gdImgs = document.querySelectorAll('#gesture-demo img');
+const gdCaptionEl = document.getElementById('gd-caption');
+let gdIndex = 0;
+setInterval(() => {
+    gdImgs[gdIndex].classList.remove('show');
+    gdIndex = (gdIndex + 1) % gdImgs.length;
+    gdImgs[gdIndex].classList.add('show');
+    gdCaptionEl.textContent = GD_CAPTIONS[gdIndex];
+}, 1600);
+
 // ========== 学习模式逻辑 ==========
-// 仅用 Do、Re 两个音符组成 6 音练习；简谱：Do=1，Re=2
-const SEQUENCE = ['do','re','do','re','do','do'];
-const NUM = { do: '1', re: '2' };
+// 七音练习序列（简谱 1-7）：Do Re Mi Fa Sol La Si Do
+const SEQUENCE = ['do','re','mi','fa','sol','la','si','do'];
+const NUM = { do: '1', re: '2', mi: '3', fa: '4', sol: '5', la: '6', si: '7' };
+const RULE_TEXT = {
+    do: 'Do-五指', re: 'Re-拇指', mi: 'Mi-食指', fa: 'Fa-食中指',
+    sol: 'Sol-三指', la: 'La-四指', si: 'Si-小指'
+};
 const cardsEl = document.getElementById('score-cards');
 const learnStatusEl = document.getElementById('learn-status');
 const cardEls = [];
@@ -594,7 +683,7 @@ function startPracticeUI() {
     cardEls[0].classList.add('current');
     learnState = 'practice';
     lStep = 0; lWrong = 0; lCanSubmit = true;
-    learnStatusEl.textContent = '请演奏第 1 个音符：张开手掌=Do，伸拇指=Re';
+    learnStatusEl.textContent = '请演奏第 1 个音符：参考左下角手势图，每音后握拳复位';
 }
 
 function enterLearn() {
@@ -640,14 +729,13 @@ function learnOnGesture(g) {
             finishLearn();
         } else {
             cardEls[lStep].classList.add('current');
-            learnStatusEl.textContent = '正确！抬手后演奏第 ' + (lStep + 1) + ' 个音符';
+            learnStatusEl.textContent = '正确！握拳复位后演奏第 ' + (lStep + 1) + ' 个音符';
         }
     } else {
         card.classList.add('error');
         pulse = 0.5; pulseNote = 'err';
         lWrong++;
-        const hint = expected === 'do' ? 'Do（张开手掌）' : 'Re（伸拇指）';
-        learnStatusEl.textContent = '这个音应是 ' + hint + '，抬手再试';
+        learnStatusEl.textContent = '这个音应是 ' + RULE_TEXT[expected] + '，握拳复位后再试';
     }
 }
 
@@ -771,7 +859,7 @@ function startRecording() {
     }
     recState = 'recording';
     recTick = setInterval(() => { recTimeEl.textContent = fmtTime(recNow()); }, 100);
-    segInfo('录制中…用手势演奏 Do / Re，可随时暂停');
+    segInfo('录制中…用七个手势演奏，每音后握拳复位，可随时暂停');
     updateRecUI();
 }
 
