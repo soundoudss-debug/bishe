@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>手势音乐可视化 - 探索+学习 Demo</title>
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <!-- 启动界面 -->
+    <div id="start-screen">
+        <h1>手势音乐可视化 Demo</h1>
+        <p>手心正对摄像头：Do-五指 · Re-拇指 · Mi-食指 · Fa-食中指 · Sol-三指 · La-四指 · Si-小指<br>
+           每奏一音后先握拳复位，再奏下一音　|　探索 Explore · 学习 Learn · 创作 Create</p>
+        <button id="start-btn">启动摄像头</button>
+    </div>
+
+    <!-- 模式切换 -->
+    <div id="mode-tabs">
+        <button class="tab active" data-mode="explore">探索 Explore</button>
+        <button class="tab" data-mode="learn">学习 Learn</button>
+        <button class="tab" data-mode="create">创作 Create</button>
+    </div>
+
+    <!-- 摄像头预览 -->
+    <div id="video-container">
+        <video id="video" autoplay playsinline muted></video>
+        <div id="status">等待手势...</div>
+    </div>
+
+    <!-- 音符大字（探索模式） -->
+    <div id="note-display">Do</div>
+
+    <!-- 无效手势提示 -->
+    <div id="gesture-warning">未识别到有效手势</div>
+
+    <!-- 底部提示 -->
+    <div id="hint">Do-五指 · Re-拇指 · Mi-食指 · Fa-食中指 · Sol-三指 · La-四指 · Si-小指　|　每音后先握拳复位</div>
+
+    <!-- 手势示范小动画 -->
+    <div id="gesture-demo-label">手心正对摄像头做手势</div>
+    <div id="gesture-demo">
+        <img class="show" src="../assets/gesture-do.png" alt="Do 五指张开">
+        <img src="../assets/gesture-re.png" alt="Re 伸拇指">
+        <img src="../assets/gesture-mi.png" alt="Mi 伸食指">
+        <img src="../assets/gesture-fa.png" alt="Fa 食指中指伸出">
+        <img src="../assets/gesture-sol.png" alt="Sol 食指中指无名指三指">
+        <img src="../assets/gesture-la.png" alt="La 四指伸出">
+        <img src="../assets/gesture-si.png" alt="Si 伸小指">
+        <div id="gd-caption">Do-五指</div>
+    </div>
+
+    <!-- 学习模式面板 -->
+    <div id="learn-panel">
+        <div id="score-cards"></div>
+        <div id="learn-status"></div>
+        <div id="learn-btns">
+            <button id="demo-btn" class="lbtn primary">播放示范</button>
+            <button id="reset-btn" class="lbtn">重新开始</button>
+        </div>
+    </div>
+
+    <!-- 创作模式：录制控制台 -->
+    <div id="create-panel">
+        <div id="rec-status-row">
+            <span id="rec-dot"></span>
+            <span id="rec-state-text">待机</span>
+            <span id="rec-time">00:00.0</span>
+        </div>
+        <div id="rec-btns">
+            <button id="rec-btn"   class="rbtn rec">录制</button>
+            <button id="pause-btn" class="rbtn pause" disabled>暂停</button>
+            <button id="stop-btn"  class="rbtn stop" disabled>停止录制</button>
+            <button id="play-btn"  class="rbtn play" disabled>播放</button>
+        </div>
+        <div id="rec-seg-info">尚无录制片段</div>
+    </div>
+
+    <!-- MediaPipe 手势识别 -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <!-- Tone.js 音频 -->
+    <script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js" crossorigin="anonymous"></script>
+    <!-- Three.js（经典全局构建，等价替代原 importmap + import） -->
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+
+    <!-- 业务脚本：按依赖顺序加载，共享同一全局作用域 -->
+    <script src="src/00-event-bus.js"></script>
+    <script src="src/01-config.js"></script>
+    <script src="src/02-scene.js"></script>
+    <script src="src/03-particles.js"></script>
+    <script src="src/04-visual-state.js"></script>
+    <script src="src/05-animate.js"></script>
+    <script src="src/06-gesture.js"></script>
+    <script src="src/07-note-styles.js"></script>
+    <script src="src/08-audio.js"></script>
+    <script src="src/09-gesture-state.js"></script>
+    <script src="src/10-carousel.js"></script>
+    <script src="src/11-learn.js"></script>
+    <script src="src/12-create.js"></script>
+    <script src="src/13-mode-switch.js"></script>
+    <script src="src/14-boot.js"></script>
+    <script src="src/15-resize.js"></script>
+    <script src="src/16-status-ui.js"></script>
+</body>
+</html>
