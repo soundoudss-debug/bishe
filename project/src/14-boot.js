@@ -16,7 +16,7 @@ document.getElementById('start-btn').addEventListener('click', async () => {
 
         synth = new Tone.Synth({
             oscillator: { type: 'triangle' },
-            envelope: { attack: 0.08, decay: 0.3, sustain: 0.6, release: 0.8 }
+            envelope: { attack: 0.08, decay: 0.3, sustain: 0.6, release: CONFIG.gesture.noteFadeOutMs / 1000 }
         });
         synth.volume.value = -14;
         const freeverb = new Tone.Freeverb({ roomSize: 0.5, wet: 0.2 }).toDestination();
