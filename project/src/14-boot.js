@@ -33,7 +33,12 @@ document.getElementById('start-btn').addEventListener('click', async () => {
         const hands = new Hands({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
         });
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.6 });
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: CONFIG.gesture.detectionConfidence,
+            minTrackingConfidence: CONFIG.gesture.trackingConfidence
+        });
         hands.onResults(onResults);
 
         const sendFrame = async () => {

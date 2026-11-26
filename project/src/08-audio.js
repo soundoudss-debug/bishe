@@ -4,7 +4,7 @@ let synth = null;
 let audioNote = null;   // 本模块当前正在响的长音（内部去重/释音用）
 
 // 音符起音：探索/创作模式的长音
-AppBus.on('gesture:note', ({ note }) => {
+AppBus.on('gesture:note', ({ value: note }) => {
     if (mode === 'learn') return;                       // Learn 用短音，由学习模块自管
     if (mode === 'create' && playState === 'playing') return; // 回放中不叠加手势音
     if (synth) {

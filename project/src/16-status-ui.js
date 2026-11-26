@@ -1,7 +1,6 @@
 // ========== 摄像框 UI 控制器 ==========
 // 只订阅识别层的状态事件来刷新文字与警告框，本身不做任何手势判定。
-let warningTimer = null;    // 警告延迟计时器
-const WARNING_DELAY = 700;  // 无效姿势持续 700ms 才弹红字，正常摆手势的过渡不会闪
+let warningTimer = null;    // 警告延迟计时器（延迟时间取 CONFIG.gesture.warningDelayMs）
 
 AppBus.on('gesture:status', ({ hasHand, stable, armed }) => {
     if (!hasHand) {
@@ -25,7 +24,8 @@ AppBus.on('gesture:status', ({ hasHand, stable, armed }) => {
     if (invalid) {
         // 仅当无效状态持续保持 WARNING_DELAY 才显示，避免弹奏过渡瞬间闪红字
         if (warningTimer === null) {
-            warningTimer = setTimeout(() => warningEl.classList.add('show'), WARNING_DELAY);
+            warningTimer = setTimeout(() => warningEl.classList.add('show'),
+                CONFIG.gesture.warningDelayMs);
         }
     } else {
         // 一旦识别到有效音符/拳头/手消失/回放，立即取消计时并隐藏

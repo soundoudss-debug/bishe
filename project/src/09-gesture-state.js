@@ -35,7 +35,7 @@ function onResults(results) {
         candidate = null; candFrames = 0;
     } else if (raw === candidate) {
         candFrames++;
-        const need = raw === 'none' ? 5 : 3;
+        const need = raw === 'none' ? CONFIG.gesture.invalidFrames : CONFIG.gesture.confirmFrames;
         if (candFrames >= need) {
             stableGesture = raw; candidate = null; candFrames = 0;
             emitConfirmed(stableGesture, confidence, timestamp);
@@ -46,6 +46,7 @@ function onResults(results) {
 
     // 每帧发布状态事件，UI 层据此渲染摄像框文字与警告（识别层不碰 DOM）
     AppBus.emit('gesture:status', {
+        type: 'status',
         hasHand: !!landmarks,
         stable: stableGesture,
         armed: armed,
@@ -53,19 +54,20 @@ function onResults(results) {
     });
 }
 
-// 稳定手势确认后的唯一对外出口：只发事件
+// 稳定手势确认后的唯一对外出口：只发标准事件（统一带 type 字段）
 function emitConfirmed(g, confidence, timestamp) {
     if (g === 'fist') {
         armed = true;
-        AppBus.emit('gesture:fist', { confidence: confidence, timestamp: timestamp });
-        AppBus.emit('gesture:release', { timestamp: timestamp });
+        AppBus.emit('gesture:fist', { type: 'fist', value: 'fist', confidence: confidence, timestamp: timestamp });
+        AppBus.emit('gesture:release', { type: 'release', timestamp: timestamp });
     } else if (g === 'none') {
         // 无效姿势：不发声，不改变门控状态
-        AppBus.emit('gesture:invalid', { timestamp: timestamp });
+        AppBus.emit('gesture:invalid', { type: 'invalid', timestamp: timestamp });
     } else {
         armed = false;
         AppBus.emit('gesture:note', {
-            note: g,
+            type: 'note',
+            value: g,
             confidence: confidence,
             timestamp: timestamp
         });

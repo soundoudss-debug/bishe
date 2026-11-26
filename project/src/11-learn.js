@@ -96,7 +96,7 @@ function finishLearn() {
 }
 
 // 学习模块订阅手势事件（内部 learnState 守卫保证仅练习中生效）
-AppBus.on('gesture:note', ({ note }) => learnOnGesture(note));
+AppBus.on('gesture:note', ({ value: note }) => learnOnGesture(note));
 AppBus.on('gesture:release', () => learnOnGesture(null));
 
 document.getElementById('demo-btn').addEventListener('click', () => {

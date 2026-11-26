@@ -31,7 +31,7 @@ function setVisualNote(note) {
 }
 
 // 视觉模块只订阅手势事件，不读取手部关键点
-AppBus.on('gesture:note', ({ note }) => {
+AppBus.on('gesture:note', ({ value: note }) => {
     if (mode === 'learn') return;                       // Learn 视觉由脉冲(pulse)驱动
     if (mode === 'create' && playState === 'playing') return; // 回放中视觉由时间轴驱动
     setVisualNote(note);

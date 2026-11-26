@@ -254,7 +254,7 @@ function updateRecUI() {
 }
 
 // 录制时间轴订阅手势事件：logRecEvent 内部仅在录制中写入
-AppBus.on('gesture:note', ({ note }) => logRecEvent('attack', note));
+AppBus.on('gesture:note', ({ value: note }) => logRecEvent('attack', note));
 AppBus.on('gesture:release', () => logRecEvent('release'));
 
 recBtn.addEventListener('click', startRecording);

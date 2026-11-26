@@ -10,9 +10,9 @@ function isOpenPalm(lm) {
     const wrist = lm[0];
     const fourFingers = [[8,6], [12,10], [16,14], [20,18]];
     const fingersExtended = fourFingers.every(([tip, pip]) =>
-        dist3d(lm[tip], wrist) > dist3d(lm[pip], wrist) * 1.05);
+        dist3d(lm[tip], wrist) > dist3d(lm[pip], wrist) * CONFIG.gesture.openPalmFingerRatio);
     const palmWidth = dist3d(lm[5], lm[17]);
-    const thumbExtended = dist3d(lm[4], lm[17]) > palmWidth * 0.95;
+    const thumbExtended = dist3d(lm[4], lm[17]) > palmWidth * CONFIG.gesture.openPalmThumbRatio;
     return fingersExtended && thumbExtended;
 }
 
@@ -23,10 +23,10 @@ function isThumbOnly(lm) {
         .every(([tip, pip]) => dist3d(lm[tip], wrist) < dist3d(lm[pip], wrist));
     // 拇指外展：拇指尖远离手腕与食指根
     const thumbOut =
-        dist3d(lm[4], wrist) > dist3d(lm[2], wrist) * 1.1 &&
-        dist3d(lm[4], lm[5]) > palmWidth * 0.55;
+        dist3d(lm[4], wrist) > dist3d(lm[2], wrist) * CONFIG.gesture.thumbOutWristRatio &&
+        dist3d(lm[4], lm[5]) > palmWidth * CONFIG.gesture.thumbOutPalmRatio;
     // 拇指与食指分离：Re 拇指外展时距离大；握拳时拇指贴食指，距离小
-    const thumbApart = dist3d(lm[4], lm[6]) > palmWidth * 0.6;
+    const thumbApart = dist3d(lm[4], lm[6]) > palmWidth * CONFIG.gesture.thumbSeparateRatio;
     return othersFolded && thumbOut && thumbApart;
 }
 
@@ -43,15 +43,14 @@ function angleAtJoint(mcp, pip, dip) {
 }
 
 // 单根手指是否伸展：三指标确认，任一成立即算伸出
-// ①指尖到腕距离 > 指根(PIP)到腕 ×1.02
-// ②手指拉直：tip 到指根(MCP)距离 > PIP 到 MCP ×1.15
-// ③PIP 关节夹角 > 150°（MCP-PIP-DIP 接近共线，容忍约 30° 微弯）
+// ①指尖到腕距离比 ②手指拉直度 ③PIP 关节夹角，阈值均在 CONFIG.gesture 中
 function fingerExtended(lm, tip, dip, pip, mcp) {
     const wrist = lm[0];
+    const g = CONFIG.gesture;
     const ratioWrist = dist3d(lm[tip], wrist) / dist3d(lm[pip], wrist);
-    const straight = dist3d(lm[tip], mcp) > dist3d(lm[pip], mcp) * 1.15;
+    const straight = dist3d(lm[tip], mcp) > dist3d(lm[pip], mcp) * g.fingerStraightRatio;
     const jointAngle = angleAtJoint(lm[mcp], lm[pip], lm[dip]);
-    return ratioWrist > 1.02 || straight || jointAngle > 150;
+    return ratioWrist > g.fingerWristRatio || straight || jointAngle > g.fingerJointAngle;
 }
 
 // 拇指是否收拢（Mi-Si 各姿势与拳头均要求拇指收拢）
@@ -59,9 +58,9 @@ function fingerExtended(lm, tip, dip, pip, mcp) {
 function isThumbFolded(lm) {
     const wrist = lm[0];
     const palmWidth = dist3d(lm[5], lm[17]);
-    const nearPalm = dist3d(lm[4], lm[5]) < palmWidth * 0.55 ||
-                     dist3d(lm[4], wrist) < dist3d(lm[2], wrist) * 1.1;
-    const nearIndex = dist3d(lm[4], lm[6]) < palmWidth * 0.6;
+    const nearPalm = dist3d(lm[4], lm[5]) < palmWidth * CONFIG.gesture.thumbOutPalmRatio ||
+                     dist3d(lm[4], wrist) < dist3d(lm[2], wrist) * CONFIG.gesture.thumbOutWristRatio;
+    const nearIndex = dist3d(lm[4], lm[6]) < palmWidth * CONFIG.gesture.thumbSeparateRatio;
     return nearPalm || nearIndex;
 }
 
